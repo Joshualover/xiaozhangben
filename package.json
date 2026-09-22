@@ -1,0 +1,35 @@
+{
+  "name": "xiaozhangben",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "小账本 Ledger - 纯本地个人记账 Web 应用",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b --noEmit false --emitDeclarationOnly false"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.13",
+    "dexie": "^4.0.8",
+    "lucide-react": "^0.441.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2",
+    "recharts": "^2.12.7",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "~5.5.4",
+    "vite": "^5.4.5",
+    "vitest": "^2.1.1"
+  }
+}

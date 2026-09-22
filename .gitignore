@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vite
+.DS_Store
+*.log
+npm-debug.log*
+coverage
+
+# 本地工作目录（含本地路径与工作记录，不进公开仓库）
+.workbuddy
+
