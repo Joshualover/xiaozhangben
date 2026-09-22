@@ -16,6 +16,7 @@ import { useLedgerData } from '@/hooks/useLedgerData';
 import { IconTile } from '@/components/Icon';
 import { Dialog, Progress, Segmented, Sheet, Switch } from '@/components/UI';
 import { CategoryManager } from '@/features/category/CategoryManager';
+import { PinSheet, type PinSheetMode } from '@/features/lock/PinSheet';
 import {
   parseTransactionCsv,
   toImportTemplateCsv,
@@ -48,12 +49,15 @@ export function SettingsPage() {
   const loadDemoData = useLedger((s) => s.loadDemoData);
   const pushToast = useLedger((s) => s.pushToast);
   const removeTag = useLedger((s) => s.removeTag);
+  const lockEnabled = useLedger((s) => s.lockEnabled);
+  const lockNow = useLedger((s) => s.lockNow);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
+  const [pinMode, setPinMode] = useState<PinSheetMode | null>(null);
   const [clearOpen, setClearOpen] = useState(false);
   const [clearConfirmText, setClearConfirmText] = useState('');
   const [csvPreview, setCsvPreview] = useState<{ rows: ParsedTxRow[]; name: string } | null>(null);
@@ -469,16 +473,46 @@ export function SettingsPage() {
           <div>
             <div className="setting-label">本地密码锁</div>
             <div className="setting-desc">
-              计划中（M6）。请注意：它只能遮挡界面，数据本身仍是明文存储，不提供加密保护。
+              开启后每次进入需输入 4-6 位数字密码。注意：它只是遮住界面，
+              账单数据仍以明文存在本机，不提供加密保护，请勿使用重要密码。
             </div>
           </div>
           <div className="setting-control">
-            <Switch checked={false} onChange={() => pushToast({ message: '密码锁计划在 M6 提供', tone: 'default' })} label="本地密码锁（未实现）" />
+            <Switch
+              checked={lockEnabled}
+              onChange={(v) => setPinMode(v ? 'enable' : 'disable')}
+              label={lockEnabled ? '关闭本地密码锁' : '开启本地密码锁'}
+            />
           </div>
         </div>
+
+        {lockEnabled ? (
+          <div className="setting-row">
+            <div>
+              <div className="setting-label">密码管理</div>
+              <div className="setting-desc">
+                修改密码需要先输入当前密码。密码只存在本机，忘记后无法找回。
+              </div>
+            </div>
+            <div className="setting-control setting-control-row">
+              <button type="button" className="btn btn-sm" onClick={() => setPinMode('change')}>
+                修改密码
+              </button>
+              <button type="button" className="btn btn-sm" onClick={lockNow}>
+                立即上锁
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <CategoryManager open={categoryOpen} onClose={() => setCategoryOpen(false)} />
+
+      <PinSheet
+        open={pinMode !== null}
+        mode={pinMode ?? 'enable'}
+        onClose={() => setPinMode(null)}
+      />
 
       <BudgetSheet open={budgetOpen} onClose={() => setBudgetOpen(false)} />
 

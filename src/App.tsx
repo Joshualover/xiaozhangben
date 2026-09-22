@@ -5,6 +5,7 @@ import { useLedger } from '@/store/useLedgerStore';
 import { useThemeSync } from '@/hooks/useTheme';
 import { Layout } from '@/components/Layout';
 import { Toasts } from '@/components/Toasts';
+import { LockScreen } from '@/features/lock/LockScreen';
 import { TransactionSheet } from '@/features/transaction/TransactionSheet';
 import { Dashboard } from '@/features/dashboard/Dashboard';
 import { TransactionsPage } from '@/features/transaction/TransactionsPage';
@@ -16,8 +17,11 @@ const ReportsPage = lazy(() =>
   import('@/features/reports/ReportsPage').then((m) => ({ default: m.ReportsPage })),
 );
 
-export function App() {  const ready = useLedger((s) => s.ready);
+export function App() {
+  const ready = useLedger((s) => s.ready);
   const init = useLedger((s) => s.init);
+  const lockEnabled = useLedger((s) => s.lockEnabled);
+  const unlocked = useLedger((s) => s.unlocked);
   const [formOpen, setFormOpen] = useState(false);
 
   useThemeSync();
@@ -62,6 +66,12 @@ export function App() {  const ready = useLedger((s) => s.ready);
         </span>
       </div>
     );
+  }
+
+  // 密码锁：等数据读完再判断 —— 锁配置本身就存在 IndexedDB 里。
+  // 这样首屏只会出现「读取中 → 解锁页」，不会先闪一眼账目再被盖住。
+  if (lockEnabled && !unlocked) {
+    return <LockScreen />;
   }
 
   return (

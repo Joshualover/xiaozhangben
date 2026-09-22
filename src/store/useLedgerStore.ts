@@ -22,6 +22,7 @@ import {
 } from '@/db';
 import { uid } from '@/lib/id';
 import { currentMonthKey } from '@/domain/period';
+import { createLockHash, isValidPin, verifyPin } from '@/domain/lock';
 import { buildDemoData } from '@/db/demo';
 
 export interface Toast {
@@ -38,6 +39,21 @@ interface SettingsSlice {
   currencySymbol: string;
 }
 
+/**
+ * 本地密码锁。
+ *
+ * lockEnabled / lockHash 属于配置：存 IndexedDB，随「导出完整备份」一起走，
+ * 换设备导入后锁依然有效。
+ *
+ * unlocked 是纯内存态，**刻意不进持久化** —— 刷新页面即重新上锁。
+ * 若把它写进 localStorage，关掉标签页再打开就能绕过，等于没有锁。
+ */
+interface LockSlice {
+  lockEnabled: boolean;
+  lockHash: string | null;
+  unlocked: boolean;
+}
+
 interface UiSlice {
   selectedMonth: string;
   filter: TxFilter;
@@ -45,7 +61,7 @@ interface UiSlice {
   lastCategoryByType: Record<TxType, string | null>;
 }
 
-interface LedgerState extends SettingsSlice, UiSlice {
+interface LedgerState extends SettingsSlice, LockSlice, UiSlice {
   ready: boolean;
   categories: Category[];
   accounts: Account[];
@@ -90,6 +106,22 @@ interface LedgerState extends SettingsSlice, UiSlice {
   /** 更新外观等设置，同时写入 state 与 IndexedDB，保证两处一致 */
   updateSettings: (patch: Partial<SettingsSlice>) => Promise<void>;
 
+  /** 校验密码；通过则置为已解锁 */
+  unlock: (pin: string) => Promise<boolean>;
+  /** 首次开启密码锁：写入加盐摘要，并直接置为已解锁 */
+  enableLock: (pin: string) => Promise<void>;
+  /** 关闭密码锁（需验证当前密码），同时清除已存摘要 */
+  disableLock: (pin: string) => Promise<boolean>;
+  /** 修改密码（需验证当前密码） */
+  changeLockPin: (currentPin: string, nextPin: string) => Promise<boolean>;
+  /** 立即上锁（下次进入或刷新后需重新输入） */
+  lockNow: () => void;
+  /**
+   * 忘记密码时的最后出路：清空全部账单数据并解除密码锁。
+   * 这是不可撤销操作，调用方必须做二次确认。
+   */
+  factoryReset: () => Promise<void>;
+
   pushToast: (t: Omit<Toast, 'id'>) => void;
   dismissToast: (id: string) => void;
 }
@@ -115,6 +147,11 @@ export const useLedger = create<LedgerState>()(
       lastUsedAccountId: null,
       lastCategoryByType: { expense: null, income: null },
 
+      // 密码锁：配置随 IndexedDB 走（可备份），unlocked 只活在内存里
+      lockEnabled: false,
+      lockHash: null,
+      unlocked: false,
+
       async init() {
         await ensureSeeded();
         const [categories, accounts, tags, transactions, transfers, budgets, settings] =
@@ -138,6 +175,8 @@ export const useLedger = create<LedgerState>()(
           theme: settings.theme,
           colorScheme: settings.colorScheme,
           currencySymbol: settings.currencySymbol,
+          lockEnabled: settings.lockEnabled,
+          lockHash: settings.lockHash ?? null,
           ready: true,
         });
       },
@@ -442,6 +481,9 @@ export const useLedger = create<LedgerState>()(
             colorScheme: s.colorScheme,
             currencySymbol: s.currencySymbol,
             monthStartDay: 1,
+            // 刻意不把密码锁写进备份：密码只存本机且无法找回，
+            // 若随备份带走，用户换设备后一旦忘记密码就再也进不去了。
+            // 备份必须永远可恢复 —— 锁让用户在新设备重新设即可。
             lockEnabled: false,
           },
         };
@@ -455,6 +497,58 @@ export const useLedger = create<LedgerState>()(
       async updateSettings(patch) {
         set((s) => ({ ...s, ...patch }));
         await dbSaveSettings(patch);
+      },
+
+      async unlock(pin) {
+        const { lockHash } = get();
+        // 没设过密码就没有可校验的东西 —— 直接放行，避免把用户锁在门外
+        if (!lockHash) {
+          set({ unlocked: true });
+          return true;
+        }
+        const ok = await verifyPin(pin, lockHash);
+        if (ok) set({ unlocked: true });
+        return ok;
+      },
+
+      async enableLock(pin) {
+        if (!isValidPin(pin)) throw new Error('密码需为 4-6 位数字');
+        const lockHash = await createLockHash(pin);
+        await dbSaveSettings({ lockEnabled: true, lockHash });
+        set({ lockEnabled: true, lockHash, unlocked: true });
+      },
+
+      async disableLock(pin) {
+        const { lockHash } = get();
+        if (lockHash && !(await verifyPin(pin, lockHash))) return false;
+        // 一并清掉摘要，避免关锁后仍残留可校验的凭据
+        await dbSaveSettings({ lockEnabled: false, lockHash: undefined });
+        set({ lockEnabled: false, lockHash: null, unlocked: true });
+        return true;
+      },
+
+      async changeLockPin(currentPin, nextPin) {
+        const { lockHash } = get();
+        if (!lockHash) throw new Error('尚未开启密码锁');
+        if (!(await verifyPin(currentPin, lockHash))) return false;
+        if (!isValidPin(nextPin)) throw new Error('密码需为 4-6 位数字');
+        const nextHash = await createLockHash(nextPin);
+        await dbSaveSettings({ lockHash: nextHash });
+        set({ lockHash: nextHash, unlocked: true });
+        return true;
+      },
+
+      lockNow() {
+        if (get().lockEnabled) set({ unlocked: false });
+      },
+
+      async factoryReset() {
+        await dbClearAll();
+        // clearAllData 会保留设置表，所以必须显式把锁配置清零 ——
+        // 否则清完数据仍然卡在锁屏外，等于没救。
+        await dbSaveSettings({ lockEnabled: false, lockHash: undefined });
+        set({ lockEnabled: false, lockHash: null, unlocked: true });
+        await get().init();
       },
 
       pushToast(t) {
