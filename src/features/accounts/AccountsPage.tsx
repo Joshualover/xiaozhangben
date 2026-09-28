@@ -41,6 +41,11 @@ export function AccountsPage() {
       ).length
     : 0;
 
+  /** 能承接其历史记录的其他账户（不含自身） */
+  const reassignCandidates = pendingDelete ? active.filter((a) => a.id !== pendingDelete.id) : [];
+  /** 有记录却无处可转移：此时删除按钮会一直是禁用态，必须说清原因并给出下一步 */
+  const blockedByNoTarget = relatedCount > 0 && reassignCandidates.length === 0;
+
   const handleDelete = async () => {
     if (!pendingDelete) return;
     try {
@@ -226,19 +231,41 @@ export function AccountsPage() {
         actions={
           <>
             <button className="btn" onClick={() => setPendingDelete(null)}>
-              取消
+              {blockedByNoTarget ? '知道了' : '取消'}
             </button>
-            <button
-              className="btn btn-danger"
-              disabled={relatedCount > 0 && !reassignTo}
-              onClick={() => void handleDelete()}
-            >
-              确认删除
-            </button>
+            {blockedByNoTarget ? (
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setPendingDelete(null);
+                  setEditing(null);
+                  setFormOpen(true);
+                }}
+              >
+                <Plus size={14} /> 新建账户
+              </button>
+            ) : (
+              <button
+                className="btn btn-danger"
+                disabled={relatedCount > 0 && !reassignTo}
+                onClick={() => void handleDelete()}
+              >
+                确认删除
+              </button>
+            )}
           </>
         }
       >
-        {relatedCount > 0 ? (
+        {blockedByNoTarget ? (
+          <>
+            该账户下有 <b>{relatedCount}</b> 条记录，删除前必须把它们转移到另一个账户，
+            否则会留下找不到账户的悬空账单。
+            <p style={{ marginTop: 10 }}>
+              但目前<b>没有其他账户</b>可以承接这些记录，所以暂时删不掉。
+              先新建一个账户，再回来处理。
+            </p>
+          </>
+        ) : relatedCount > 0 ? (
           <>
             该账户下有 <b>{relatedCount}</b> 条记录，删除前必须把它们转移到另一个账户，
             否则会留下找不到账户的悬空账单。
@@ -253,13 +280,11 @@ export function AccountsPage() {
                 onChange={(e) => setReassignTo(e.target.value)}
               >
                 <option value="">请选择目标账户</option>
-                {active
-                  .filter((a) => a.id !== pendingDelete?.id)
-                  .map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
+                {reassignCandidates.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
               </select>
             </div>
           </>

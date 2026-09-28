@@ -106,7 +106,7 @@ export function CategoryManager({ open, onClose }: { open: boolean; onClose: () 
                         {children.length} 个细分 · {usageCount(c.id)} 笔账单
                       </div>
                     </div>
-                    <div className="tx-actions" style={{ opacity: 1 }}>
+                    <div className="tx-actions">
                       <button
                         className="btn btn-ghost btn-icon btn-sm"
                         aria-label={c.hidden ? '显示' : '隐藏'}

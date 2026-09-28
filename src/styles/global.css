@@ -1215,8 +1215,13 @@ button.overview-cell:hover {
   flex: none;
 }
 
+/* 「悬停才显示」是账单列表的局部规则，不是这个操作组本身的属性。
+   规则挂在 .tx-item 上而非 .tx-actions 上 —— 账户卡片、分类管理也复用同一个操作组，
+   但它们数量少、属于明确的主动操作，常显才对。
+   （此前隐藏规则直接作用在 .tx-actions 上，桌面端账户的编辑/删除按钮因此永久透明，
+     分类管理只能靠在 JSX 里内联 opacity:1 绕过。） */
 @media (hover: hover) {
-  .tx-actions {
+  .tx-item .tx-actions {
     opacity: 0;
     transition: opacity 0.15s;
   }
